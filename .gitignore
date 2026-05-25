@@ -1,0 +1,28 @@
+# Dataset
+data/
+
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# TensorBoard Logs
+logs/
+
+# Model Checkpoints
+checkpoints/
+
+# Evaluation Outputs
+evaluation/
+
+# VSCode
+.vscode/
+
+# OS Files
+.DS_Store
+Thumbs.db
