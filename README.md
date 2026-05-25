@@ -102,7 +102,7 @@ Key architectural features:
 ```bash
 icu-risk-prediction/
 │
-├── data/
+├── assets/
 │
 ├── src/
 │   ├── preprocess.py
@@ -113,9 +113,8 @@ icu-risk-prediction/
 │
 ├── notebooks/
 │
-├── logs/
-├── checkpoints/
-├── evaluation/
+├── configs/
+├── app/
 │
 ├── requirements.txt
 ├── .gitignore
@@ -175,13 +174,21 @@ The model demonstrates strong temporal discrimination capability on multivariate
 
 # ROC Curve
 
-![ROC Curve](evaluation/roc_curve.png)
+![ROC Curve](assets/250526_0235/roc_curve.png)
 
 ---
 
 # Confusion Matrix
 
-![Confusion Matrix](evaluation/confusion_matrix.png)
+![Confusion Matrix](assets/250526_0235/confusion_matrix.png)
+
+---
+
+# Training & Validation Loss Curves
+
+The following curves show stable convergence behavior during training, with both training and validation loss decreasing consistently over epochs.
+
+![Loss Curves](assets/250526_0235/loss.png)
 
 ---
 
@@ -204,7 +211,7 @@ The model demonstrates strong temporal discrimination capability on multivariate
 Clone the repository:
 
 ```bash
-git clone <your_repo_url>
+git clone https://github.com/Sriharsh007-Techie/icu-risk-prediction.git
 ```
 
 Create virtual environment:
