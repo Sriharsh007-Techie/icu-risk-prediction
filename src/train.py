@@ -33,13 +33,13 @@ import os
 # Hyperparameters
 # ==================================================
 
-SEQUENCE_LENGTH = 16
+SEQUENCE_LENGTH = 32
 
 BATCH_SIZE = 64
 
 LEARNING_RATE = 0.001
 
-NUM_EPOCHS = 50
+NUM_EPOCHS = 100
 
 HIDDEN_DIM = 64
 
@@ -205,7 +205,13 @@ def main():
     # Initialize Model
     # ----------------------------------------------
 
+    INPUT_DIM = X.shape[2]
+
+    print("\nInput Features:", INPUT_DIM)
+
+
     model = TCNRiskPredictor(
+        input_dim=INPUT_DIM,
         hidden_dim=HIDDEN_DIM
     ).to(device)
 
@@ -406,12 +412,14 @@ def main():
 
             best_val_accuracy = val_accuracy
 
+            model_save_path = (
+                f"{CHECKPOINT_DIR}/best_model_{timestamp}.pth"
+            )
+    
             torch.save(
                 model.state_dict(),
-                f"{CHECKPOINT_DIR}/best_model.pth"
+                model_save_path
             )
-
-
 
         # ==========================================
         # Epoch Summary

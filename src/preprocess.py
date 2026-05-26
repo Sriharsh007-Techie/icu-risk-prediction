@@ -1,27 +1,93 @@
-import pandas as pd
-import numpy as np
 import os
 
-from sklearn.preprocessing import StandardScaler
+import numpy as np
+import pandas as pd
+
+from sklearn.preprocessing import MinMaxScaler
 
 
-# --------------------------------------------------
-# Important Physiological Signals
-# --------------------------------------------------
 
-SIGNALS = [
+# ==========================================
+# Clinical Signals Used
+# ==========================================
+
+signals = [
+
+    # Vital Signs
     "HR",
     "RespRate",
     "Temp",
+
+    # Blood Pressure
     "NISysABP",
     "NIDiasABP",
-    "NIMAP"
+    "NIMAP",
+
+    # Neurological
+    "GCS",
+
+    # Renal / Output
+    "Urine",
+
+    # Kidney Function
+    "BUN",
+    "Creatinine",
+
+    # Metabolic
+    "Glucose",
+    "HCO3",
+
+    # Hematology
+    "HCT",
+    "Platelets",
+    "WBC",
+
+    # Electrolytes
+    "K",
+    "Na",
+    "Mg"
 ]
 
 
-# --------------------------------------------------
+
+# ==========================================
+# Clinical Default Values
+# ==========================================
+
+default_values = {
+
+    "HR": 80,
+    "RespRate": 18,
+    "Temp": 37,
+
+    "NISysABP": 120,
+    "NIDiasABP": 80,
+    "NIMAP": 90,
+
+    "GCS": 15,
+
+    "Urine": 100,
+
+    "BUN": 15,
+    "Creatinine": 1.0,
+
+    "Glucose": 110,
+    "HCO3": 24,
+
+    "HCT": 40,
+    "Platelets": 250,
+    "WBC": 8,
+
+    "K": 4.0,
+    "Na": 140,
+    "Mg": 2.0
+}
+
+
+
+# ==========================================
 # Load Single Patient File
-# --------------------------------------------------
+# ==========================================
 
 def load_patient_data(file_path):
 
@@ -30,106 +96,178 @@ def load_patient_data(file_path):
     return df
 
 
-# --------------------------------------------------
-# Filter Important Signals
-# --------------------------------------------------
 
-def filter_signals(df):
+# ==========================================
+# Generate Risk Labels
+# ==========================================
 
-    df = df[
-        df["Parameter"].isin(SIGNALS)
+def generate_risk_label(row):
+
+    risk = 0
+
+    # --------------------------------------
+    # Vital Sign Instability
+    # --------------------------------------
+
+    if row["HR"] > 100:
+        risk = 1
+
+    if row["RespRate"] > 22:
+        risk = 1
+
+    if row["Temp"] > 38:
+        risk = 1
+
+    if row["NIMAP"] < 65:
+        risk = 1
+
+    # --------------------------------------
+    # Neurological
+    # --------------------------------------
+
+    if row["GCS"] < 13:
+        risk = 1
+
+    # --------------------------------------
+    # Renal Dysfunction
+    # --------------------------------------
+
+    if row["Creatinine"] > 1.5:
+        risk = 1
+
+    if row["BUN"] > 25:
+        risk = 1
+
+    # --------------------------------------
+    # Infection / Inflammation
+    # --------------------------------------
+
+    if row["WBC"] > 12:
+        risk = 1
+
+    # --------------------------------------
+    # Metabolic Disturbance
+    # --------------------------------------
+
+    if row["Glucose"] > 180:
+        risk = 1
+
+    return risk
+
+
+
+# ==========================================
+# Process Single Patient File
+# ==========================================
+
+def process_patient_file(
+    file_path,
+    sequence_length=32
+):
+
+    # --------------------------------------
+    # Load File
+    # --------------------------------------
+
+    df = load_patient_data(file_path)
+
+
+    # --------------------------------------
+    # Keep Only Selected Signals
+    # --------------------------------------
+
+    filtered_df = df[
+        df["Parameter"].isin(signals)
     ]
 
-    return df
+
+    # Skip if empty after filtering
+    if len(filtered_df) == 0:
+
+        return np.array([]), np.array([])
 
 
-# --------------------------------------------------
-# Convert Long → Wide Format
-# --------------------------------------------------
+    # --------------------------------------
+    # Convert Long Format → Wide Format
+    # --------------------------------------
 
-def pivot_signals(df):
-
-    pivot_df = df.pivot_table(
+    pivot_df = filtered_df.pivot_table(
         index="Time",
         columns="Parameter",
         values="Value",
         aggfunc="mean"
     )
 
-    return pivot_df
+
+    # --------------------------------------
+    # Ensure Every Signal Exists
+    # --------------------------------------
+
+    for signal in signals:
+
+        if signal not in pivot_df.columns:
+
+            pivot_df[signal] = np.nan
 
 
-# --------------------------------------------------
-# Handle Missing Values
-# --------------------------------------------------
-
-def handle_missing_values(df):
-
-    df = df.interpolate()
-
-    df = df.ffill()
-
-    df = df.bfill()
-
-    return df
+    # Keep consistent signal order
+    pivot_df = pivot_df[signals]
 
 
-# --------------------------------------------------
-# Normalize Features
-# --------------------------------------------------
+    # Skip completely empty patients
+    if len(pivot_df) == 0:
 
-def normalize_features(df):
+        return np.array([]), np.array([])
 
-    scaler = StandardScaler()
 
-    scaled = scaler.fit_transform(df)
+    # ======================================
+    # Missing Value Handling
+    # ======================================
 
-    scaled_df = pd.DataFrame(
-        scaled,
-        columns=df.columns,
-        index=df.index
+    # Forward fill
+    pivot_df = pivot_df.ffill()
+
+    # Backward fill
+    pivot_df = pivot_df.bfill()
+
+    # Clinical default fallback
+    pivot_df = pivot_df.fillna(
+        value=default_values
     )
 
-    return scaled_df, scaler
+    # Final safety fallback
+    pivot_df = pivot_df.replace(
+        [np.inf, -np.inf],
+        np.nan
+    )
+
+    pivot_df = pivot_df.fillna(0)
 
 
-# --------------------------------------------------
-# Generate Risk Labels
-# --------------------------------------------------
+    # ======================================
+    # Generate Risk Labels
+    # ======================================
 
-def generate_risk_label(row):
-
-    hr = row["HR"]
-
-    rr = row["RespRate"]
-
-    temp = row["Temp"]
-
-    map_value = row["NIMAP"]
+    pivot_df["RiskLabel"] = pivot_df.apply(
+        generate_risk_label,
+        axis=1
+    )
 
 
-    if (
-        hr > 100
-        or rr > 22
-        or temp > 38
-        or map_value < 65
-    ):
+    # ======================================
+    # Feature Normalization
+    # ======================================
 
-        return 1
+    scaler = MinMaxScaler()
 
-
-    return 0
+    pivot_df[signals] = scaler.fit_transform(
+        pivot_df[signals]
+    )
 
 
-# --------------------------------------------------
-# Create Time-Series Sequences
-# --------------------------------------------------
-
-def create_classification_sequences(
-    data,
-    labels,
-    sequence_length=8
-):
+    # ======================================
+    # Create Temporal Sequences
+    # ======================================
 
     X = []
 
@@ -137,217 +275,110 @@ def create_classification_sequences(
 
 
     for i in range(
-        len(data) - sequence_length
+        len(pivot_df) - sequence_length
     ):
 
-        sequence = data[
+        sequence = pivot_df[
+            signals
+        ].iloc[
             i:i + sequence_length
-        ]
+        ].values
 
-        label = labels[
+
+        label = pivot_df[
+            "RiskLabel"
+        ].iloc[
             i + sequence_length
         ]
+
 
         X.append(sequence)
 
         y.append(label)
 
 
-    return np.array(X), np.array(y)
+    X = np.array(X)
+
+    y = np.array(y)
 
 
-# --------------------------------------------------
-# Process One Patient File
-# --------------------------------------------------
+    return X, y
 
-def process_patient_file(
-    file_path,
-    sequence_length=8
+
+
+# ==========================================
+# Load Complete Dataset
+# ==========================================
+
+def load_complete_dataset(
+    sequence_length=32
 ):
 
-    try:
+    data_paths = [
+        "../data/raw/set-a",
+        "../data/raw/set-b"
+    ]
 
-        # -----------------------------------------
-        # Load patient data
-        # -----------------------------------------
-
-        df = load_patient_data(
-            file_path
-        )
-
-
-        # -----------------------------------------
-        # Filter signals
-        # -----------------------------------------
-
-        df = filter_signals(df)
-
-
-        # -----------------------------------------
-        # Pivot signals
-        # -----------------------------------------
-
-        pivot_df = pivot_signals(df)
-
-
-        # -----------------------------------------
-        # Check required signals
-        # -----------------------------------------
-
-        required_columns = SIGNALS.copy()
-
-        for col in required_columns:
-
-            if col not in pivot_df.columns:
-
-                return None, None
-
-
-        # -----------------------------------------
-        # Handle missing values
-        # -----------------------------------------
-
-        pivot_df = handle_missing_values(
-            pivot_df
-        )
-
-
-        # -----------------------------------------
-        # Generate labels
-        # -----------------------------------------
-
-        pivot_df["RiskLabel"] = pivot_df.apply(
-            generate_risk_label,
-            axis=1
-        )
-
-
-        # -----------------------------------------
-        # Normalize features
-        # -----------------------------------------
-
-        scaled_df, scaler = normalize_features(
-            pivot_df.drop(
-                columns=["RiskLabel"]
-            )
-        )
-
-
-        # -----------------------------------------
-        # Create sequences
-        # -----------------------------------------
-
-        X, y = create_classification_sequences(
-            scaled_df.values,
-            pivot_df["RiskLabel"].values,
-            sequence_length=sequence_length
-        )
-
-
-        # -----------------------------------------
-        # Skip tiny patients
-        # -----------------------------------------
-
-        if len(X) == 0:
-
-            return None, None
-
-
-        return X, y
-
-
-    except Exception as e:
-
-        print(
-            f"Error processing {file_path}: {e}"
-        )
-
-        return None, None
-
-
-# --------------------------------------------------
-# Load All Patients From Folder
-# --------------------------------------------------
-
-def load_dataset_from_folder(
-    folder_path,
-    sequence_length=8
-):
 
     all_X = []
 
     all_y = []
 
 
-    for filename in os.listdir(folder_path):
+    for data_path in data_paths:
 
-        if filename.endswith(".txt"):
+        print(f"\nProcessing: {data_path}")
 
-            file_path = os.path.join(
-                folder_path,
-                filename
-            )
 
-            X, y = process_patient_file(
-                file_path,
-                sequence_length
-            )
+        for filename in os.listdir(data_path):
 
-            if X is not None:
+            if filename.endswith(".txt"):
 
-                all_X.append(X)
+                file_path = os.path.join(
+                    data_path,
+                    filename
+                )
 
-                all_y.append(y)
 
+                try:
+
+                    X, y = process_patient_file(
+                        file_path,
+                        sequence_length
+                    )
+
+
+                    if len(X) > 0:
+
+                        all_X.append(X)
+
+                        all_y.append(y)
+
+
+                except Exception as e:
+
+                    print(
+                        f"\nError processing {filename}"
+                    )
+
+                    print(e)
+
+
+    # ======================================
+    # Combine All Patients
+    # ======================================
 
     X = np.concatenate(all_X)
 
     y = np.concatenate(all_y)
 
-    return X, y
 
+    print("\n=================================")
+    print("Final Dataset Shapes")
+    print("=================================")
 
-# --------------------------------------------------
-# Load Complete Dataset
-# --------------------------------------------------
-
-def load_complete_dataset(
-    sequence_length=8
-):
-
-    # -----------------------------------------
-    # Load set-a
-    # -----------------------------------------
-
-    X_a, y_a = load_dataset_from_folder(
-        "../data/raw/set-a",
-        sequence_length
-    )
-
-
-    # -----------------------------------------
-    # Load set-b
-    # -----------------------------------------
-
-    X_b, y_b = load_dataset_from_folder(
-        "../data/raw/set-b",
-        sequence_length
-    )
-
-
-    # -----------------------------------------
-    # Combine datasets
-    # -----------------------------------------
-
-    X = np.concatenate([
-        X_a,
-        X_b
-    ])
-
-    y = np.concatenate([
-        y_a,
-        y_b
-    ])
+    print("X shape:", X.shape)
+    print("y shape:", y.shape)
 
 
     return X, y
